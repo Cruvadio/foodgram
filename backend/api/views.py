@@ -5,8 +5,11 @@ from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.reverse import reverse
 from rest_framework.viewsets import (
-    GenericViewSet, ModelViewSet, ReadOnlyModelViewSet,
+    GenericViewSet,
+    ModelViewSet,
+    ReadOnlyModelViewSet,
 )
 
 from django.contrib.auth import get_user_model
@@ -17,9 +20,15 @@ from recipes.models import Cart, Ingredient, Recipe, Tag
 from .filters import RecipesFilter
 from .permissions import CurrentUser, IsAuthorOrReadOnly
 from .serializers import (
-    AvatarRequestSerializer, AvatarResponseSerializer, IngredientSerializer,
-    RecipeSerializer, ShortRecipeSerializer, TagSerializer,
-    UserCreateSerializer, UserFollowingsSerializer, UserProfileSerializer,
+    AvatarRequestSerializer,
+    AvatarResponseSerializer,
+    IngredientSerializer,
+    RecipeSerializer,
+    ShortRecipeSerializer,
+    TagSerializer,
+    UserCreateSerializer,
+    UserFollowingsSerializer,
+    UserProfileSerializer,
 )
 
 User = get_user_model()
@@ -81,9 +90,10 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
 
     @action(detail=True, methods=['get'], url_path='get-link')
     def get_link(self, request, pk=None):
-        long_url = request.build_absolute_uri()
+        relative_url = reverse(f'api/recipes/{pk}')
+        absolute_url = request.build_absolute_uri(relative_url)
         tiny_type = Shortener()
-        shortened_url = tiny_type.tinyurl.short(long_url)
+        shortened_url = tiny_type.tinyurl.short(absolute_url)
         return Response(
             {'short-link': shortened_url}, status=status.HTTP_200_OK
         )
