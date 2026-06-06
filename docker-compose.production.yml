@@ -15,8 +15,6 @@ services:
     ports:
     - "5432:5432"
   backend:
-    command:
-      - gunicorn --bind 0.0.0.0:8000 backend.wsgi
     env_file:
       - .env
     image: cruvadio/foodgram_backend:latest
