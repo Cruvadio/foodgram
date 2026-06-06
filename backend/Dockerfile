@@ -16,4 +16,4 @@ RUN sed -i 's/\r$//g' /app/entrypoint.sh
 COPY . .
 
 ENTRYPOINT ["/bin/sh","/app/entrypoint.sh"]
-CMD ["gunicorn", "--bind 0.0.0.0:8000", "backend.wsgi"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "backend.wsgi"]
