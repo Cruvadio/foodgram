@@ -1,14 +1,13 @@
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'secret_key')
 
-SECRET_KEY = 'django-insecure-kodh866g=!tpy-5!lb9twbsl9gwlnm=qn-g*ejz(7pw)o+wady'
+DEBUG = os.environ.get('DJANGO_DEBUG', True)
 
-DEBUG = True
-
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -17,13 +16,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-
     'rest_framework',
+    'rest_framework.authtoken',
+    'django_filters',
     'djoser',
-
     'api.apps.ApiConfig',
     'users.apps.UsersConfig',
-    'recipes.apps.RecipesConfig'
+    'recipes.apps.RecipesConfig',
 ]
 
 MIDDLEWARE = [
@@ -55,14 +54,18 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'postgres'),
+        'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', ''),
+        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
+
+DEFAULT_PAGE_SIZE = 10
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -70,7 +73,10 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
-    )
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'api.paginators.PageNumberLimitPagination',
+    'PAGE_SIZE': DEFAULT_PAGE_SIZE,
+    'SEARCH_PARAM': 'name',
 }
 
 AUTH_USER_MODEL = 'users.User'
@@ -90,13 +96,23 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTHENTICATION_BACKENDS = [
+    'djoser.auth_backends.LoginFieldBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
 DJOSER = {
+    'PERMISSIONS': {
+        'user_list': ['rest_framework.permissions.AllowAny'],
+    },
+    'LOGIN_FIELD': 'email',
+    'SEND_ACTIVATION_EMAIL': False,
     'SERIALIZERS': {
         'user': 'api.serializers.UserProfileSerializer',
         'user_create': 'api.serializers.UserCreateSerializer',
-    }
+        'current_user': 'api.serializers.UserProfileSerializer',
+    },
 }
-
 
 LANGUAGE_CODE = 'ru-RU'
 
@@ -106,10 +122,8 @@ USE_I18N = True
 
 USE_TZ = True
 
-
-
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'collect_static'
 
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = '/media'
 MEDIA_URL = '/media/'

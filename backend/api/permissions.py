@@ -1,7 +1,8 @@
 from rest_framework import permissions
 from rest_framework.permissions import BasePermission
 
-class IsOwner(BasePermission):
+
+class CurrentUser(BasePermission):
     def has_object_permission(self, request, view, obj):
         return obj == request.user
 
@@ -9,6 +10,7 @@ class IsOwner(BasePermission):
         if obj is not None:
             return self.has_object_permission(request, view, obj)
         return request.user and request.user.is_authenticated
+
 
 class IsAuthor(BasePermission):
     def has_object_permission(self, request, view, obj):
@@ -18,6 +20,7 @@ class IsAuthor(BasePermission):
         if obj is not None:
             return self.has_object_permission(request, view, obj)
         return request.user and request.user.is_authenticated
+
 
 class IsAuthorOrReadOnly(BasePermission):
     def has_object_permission(self, request, view, obj):
