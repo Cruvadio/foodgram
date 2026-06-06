@@ -21,10 +21,8 @@ services:
       - .env
     image: cruvadio/foodgram_backend:latest
     volumes:
-      - ./backend/:/app/
       - static:/backend_static
       - media:/media
-      - ./data:/app/data
     depends_on:
       db:
         condition: service_started
