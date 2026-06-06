@@ -8,7 +8,9 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'secret_key')
 DEBUG = os.environ.get('DJANGO_DEBUG', False)
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',')
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    'CSRF_TRUSTED_ORIGINS', 'http://localhost,http://127.0.0.1'
+).split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',

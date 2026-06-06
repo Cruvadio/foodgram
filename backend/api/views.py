@@ -82,7 +82,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
 
     @action(detail=True, methods=['get'], url_path='get-link')
     def get_link(self, request, pk=None):
-        relative_url = reverse(f'api/recipes/{pk}')
+        relative_url = f'/api/recipes/{pk}/'
         absolute_url = request.build_absolute_uri(relative_url)
         tiny_type = Shortener()
         shortened_url = tiny_type.tinyurl.short(absolute_url)
