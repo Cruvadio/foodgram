@@ -6,7 +6,9 @@ from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import (
-    GenericViewSet, ModelViewSet, ReadOnlyModelViewSet,
+    GenericViewSet,
+    ModelViewSet,
+    ReadOnlyModelViewSet,
 )
 
 from django.contrib.auth import get_user_model
@@ -17,9 +19,15 @@ from recipes.models import Cart, Ingredient, Recipe, Tag
 from .filters import RecipesFilter
 from .permissions import CurrentUser, IsAuthorOrReadOnly
 from .serializers import (
-    AvatarRequestSerializer, AvatarResponseSerializer, IngredientSerializer,
-    RecipeSerializer, ShortRecipeSerializer, TagSerializer,
-    UserCreateSerializer, UserFollowingsSerializer, UserProfileSerializer,
+    AvatarRequestSerializer,
+    AvatarResponseSerializer,
+    IngredientSerializer,
+    RecipeSerializer,
+    ShortRecipeSerializer,
+    TagSerializer,
+    UserCreateSerializer,
+    UserFollowingsSerializer,
+    UserProfileSerializer,
 )
 
 User = get_user_model()
@@ -60,7 +68,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
     queryset = (
         Recipe.objects.select_related('author')
         .all()
-        .order_by('published_date')
+        .order_by('-published_date')
     )
     permission_classes = [IsAuthorOrReadOnly]
     http_method_names = ['get', 'post', 'patch', 'delete']
