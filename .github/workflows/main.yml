@@ -79,7 +79,8 @@ jobs:
       - name: Push to DockerHub
         uses: docker/build-push-action@v4
         with:
-          context: ./gateway/
+          file: ./gateway/Dockerfile
+          context: .
           push: true
           tags: cruvadio/foodgram_gateway:latest
   deploy:
