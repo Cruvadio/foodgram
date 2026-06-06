@@ -1,4 +1,4 @@
-name: Main Kittygram workflow
+name: Main Foodgram workflow
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
       - name: Set up nodeJS
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 24
 
       - name: Install dependencies
         run: |
