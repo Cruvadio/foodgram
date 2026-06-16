@@ -1,7 +1,6 @@
 from django.contrib.auth.models import AbstractUser
+from django.core.exceptions import ValidationError
 from django.db import models
-
-from recipes.models import Recipe
 
 
 class User(AbstractUser):
@@ -10,27 +9,11 @@ class User(AbstractUser):
         unique=True,
         verbose_name='email',
         max_length=255,
-        help_text='Email пользователя',
     )
     avatar = models.ImageField(
         upload_to='users/pictures/',
-        null=True,
-        blank=True,
-        default=None,
+        default='',
         help_text='Аватар пользователя',
-    )
-    following = models.ManyToManyField(
-        'self',
-        related_name='followers',
-        blank=True,
-        symmetrical=False,
-        help_text='Подписки пользователя',
-    )
-    favourites = models.ManyToManyField(
-        Recipe,
-        related_name='favourited_by',
-        blank=True,
-        help_text='Избранные рецепты пользователя',
     )
 
     REQUIRED_FIELDS = [
@@ -40,6 +23,38 @@ class User(AbstractUser):
     class Meta:
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+        ordering = ('username',)
 
     def __str__(self):
         return self.username
+
+
+class Follow(models.Model):
+    follower = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='following',
+    )
+    following = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='followers',
+    )
+
+    class Meta:
+        verbose_name = 'Подписка'
+        verbose_name_plural = 'Подписки'
+        unique_together = ('follower', 'following')
+
+    def __str__(self):
+        return self.following
+
+    def clean(self):
+        super().clean()
+
+        if self.follower == self.following:
+            raise ValidationError(
+                {
+                    'follower': 'Cannot follow yourself',
+                }
+            )

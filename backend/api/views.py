@@ -1,3 +1,5 @@
+from typing import Optional, Type
+
 from django_filters.rest_framework import DjangoFilterBackend
 from pyshorteners import Shortener
 from rest_framework import mixins, status
@@ -5,43 +7,49 @@ from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.serializers import Serializer
 from rest_framework.viewsets import (
     GenericViewSet, ModelViewSet, ReadOnlyModelViewSet,
 )
 
 from django.contrib.auth import get_user_model
-from django.db.models import Sum
+from django.db.models import BooleanField, Exists, OuterRef, Value
+from django.http import HttpResponse
 
-from recipes.models import Cart, Ingredient, Recipe, Tag
+from recipes.models import Cart, Favorite, Ingredient, Recipe, Tag
+from users.models import Follow
 
 from .filters import RecipesFilter
 from .permissions import CurrentUser, IsAuthorOrReadOnly
 from .serializers import (
-    AvatarRequestSerializer, AvatarResponseSerializer, IngredientSerializer,
-    RecipeSerializer, ShortRecipeSerializer, TagSerializer,
-    UserCreateSerializer, UserFollowingsSerializer, UserProfileSerializer,
+    AvatarRequestSerializer, AvatarResponseSerializer, CartSerializer,
+    IngredientSerializer, RecipeSerializer, ShortRecipeSerializer,
+    TagSerializer, UserCreateSerializer, UserFollowingsSerializer,
+    UserProfileSerializer,
 )
+from .utils import make_ingredients_in_cart_list
 
 User = get_user_model()
 
 
 class SubscribeMixin:
     @staticmethod
-    def subscribe_logic(self, request, queryset):
+    def subscribe_logic(self, request, model, **kwargs):
         instance = self.get_object()
 
         if request.method == 'POST':
-            if queryset.filter(pk=request.user.pk).exists():
+            if model.objects.filter(**kwargs).exists():
                 return Response(status=status.HTTP_400_BAD_REQUEST)
             data = self.get_serializer(instance).data
-            queryset.add(request.user)
+            model.objects.create(**kwargs)
             return Response(data=data, status=status.HTTP_201_CREATED)
 
         elif request.method == 'DELETE':
-            if not queryset.filter(pk=request.user.pk).exists():
-                return Response(status=status.HTTP_400_BAD_REQUEST)
-            queryset.remove(request.user)
-            return Response(status=status.HTTP_204_NO_CONTENT)
+            deleted = model.objects.filter(**kwargs).delete()
+            if deleted:
+                return Response(status=status.HTTP_204_NO_CONTENT)
+            return Response(status=status.HTTP_400_BAD_REQUEST)
+
         else:
             return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
 
@@ -56,22 +64,50 @@ class TagViewSet(ReadOnlyModelViewSet):
     pagination_class = None
 
 
-class RecipeViewSet(ModelViewSet, SubscribeMixin):
-    queryset = (
-        Recipe.objects.select_related('author')
-        .all()
-        .order_by('-published_date')
-    )
+class MultiSerializerViewSetMixin:
+    serializer_classes: Optional[dict[str, Type[Serializer]]] = None
+
+    def get_serializer_class(self):
+        try:
+            return self.serializer_classes[self.action]
+        except KeyError:
+            return super().get_serializer_class()
+
+
+class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
     permission_classes = [IsAuthorOrReadOnly]
     http_method_names = ['get', 'post', 'patch', 'delete']
     filter_backends = [DjangoFilterBackend]
     filterset_class = RecipesFilter
+    serializer_class = RecipeSerializer
+    serializer_classes = {
+        'shopping_cart': ShortRecipeSerializer,
+        'favorite': ShortRecipeSerializer,
+    }
 
-    def get_serializer_class(self):
-        if self.action == 'shopping_cart' or self.action == 'favorite':
-            return ShortRecipeSerializer
+    def get_queryset(self):
+        user = self.request.user
+        queryset = (
+            Recipe.objects.select_related('author')
+            .prefetch_related('tags')
+            .prefetch_related('ingredients')
+            .order_by('-published_date')
+        )
+        if user.is_authenticated:
+            queryset = queryset.annotate(
+                is_favorited=Exists(
+                    user.favorites.filter(recipe__id=OuterRef('pk'))
+                ),
+                is_in_shopping_cart=Exists(
+                    Cart.objects.filter(owner=user, recipes=OuterRef('pk'))
+                ),
+            )
         else:
-            return RecipeSerializer
+            queryset = queryset.annotate(
+                is_favorited=Value(False, output_field=BooleanField()),
+                is_in_shopping_cart=Value(False, output_field=BooleanField()),
+            )
+        return queryset
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -96,7 +132,11 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
     )
     def favorite(self, request, pk=None):
         return self.subscribe_logic(
-            self, request, self.get_object().favourited_by
+            self,
+            request,
+            Favorite,
+            recipe=self.get_object(),
+            user=request.user,
         )
 
     @action(
@@ -105,22 +145,23 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
         permission_classes=[IsAuthenticated],
     )
     def shopping_cart(self, request, pk=None):
-        user = request.user
-        cart, _ = Cart.objects.get_or_create(owner=user)
         recipe = self.get_object()
+        serializer = CartSerializer(
+            data={},
+            context={
+                'request': request,
+                'recipe': recipe,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
         if request.method == 'POST':
-            if cart.recipes.contains(recipe):
-                return Response(status=status.HTTP_400_BAD_REQUEST)
-            cart.recipes.add(recipe)
-            data = self.get_serializer(recipe).data
-            return Response(data=data, status=status.HTTP_201_CREATED)
-        elif request.method == 'DELETE':
-            if not cart.recipes.contains(recipe):
-                return Response(status=status.HTTP_400_BAD_REQUEST)
-            cart.recipes.remove(recipe)
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        else:
-            return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            return Response(
+                ShortRecipeSerializer(recipe).data,
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(
         detail=False,
@@ -129,42 +170,46 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin):
         permission_classes=[IsAuthenticated],
     )
     def download_shopping_cart(self, request):
-        cart, _ = Cart.objects.get_or_create(owner=self.request.user)
-        ingredients = (
-            cart.recipes.values_list(
-                'ingredient_amounts__ingredient__name',
-                'ingredient_amounts__ingredient__measurement_unit',
-            )
-            .annotate(amount=Sum('ingredient_amounts__amount'))
-            .order_by('ingredient_amounts__ingredient__name')
-        )
-        shopping_list = 'Список покупок:\n\n'
-        for name, amount, unit in ingredients:
-            shopping_list += f'- {name}: {amount} {unit}\n'
-        response = Response(shopping_list, content_type='text/plain')
+        shopping_list = make_ingredients_in_cart_list(request)
+        response = HttpResponse(shopping_list, content_type='text/plain')
         response['Content-Disposition'] = (
             'attachment; filename="shopping_list.txt"'
         )
         return response
 
 
-class UserViewSet(mixins.RetrieveModelMixin, GenericViewSet, SubscribeMixin):
+class UserViewSet(
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+    SubscribeMixin,
+    MultiSerializerViewSetMixin,
+):
     serializer_class = UserProfileSerializer
     queryset = User.objects.all().prefetch_related('recipes')
     http_method_names = ['get', 'post', 'put', 'delete']
     permission_classes = [AllowAny]
+    serializer_classes = {
+        'subscribe_toggle': UserFollowingsSerializer,
+        'create': UserCreateSerializer,
+        'manage_avatar': AvatarRequestSerializer,
+    }
 
     lookup_value_regex = '[0-9]+'
 
-    def get_serializer_class(self):
-        if self.action == 'subscribe_toggle':
-            return UserFollowingsSerializer
-        if self.request.method == 'POST':
-            return UserCreateSerializer
-        if self.action == 'manage_avatar':
-            return AvatarRequestSerializer
+    def get_queryset(self):
+        user = self.request.user
+        queryset = User.objects.prefetch_related('recipes')
+        if user.is_authenticated:
+            queryset = queryset.annotate(
+                is_subscribed=Exists(
+                    user.following.filter(following__id=OuterRef('pk'))
+                ),
+            )
         else:
-            return super().get_serializer_class()
+            queryset = queryset.annotate(
+                is_subscribed=Value(False, output_field=BooleanField()),
+            )
+        return queryset
 
     @action(
         detail=False,
@@ -194,7 +239,13 @@ class UserViewSet(mixins.RetrieveModelMixin, GenericViewSet, SubscribeMixin):
     def subscribe_toggle(self, request, pk=None):
         if self.get_object() == request.user:
             return Response(status=status.HTTP_400_BAD_REQUEST)
-        return self.subscribe_logic(self, request, self.get_object().followers)
+        return self.subscribe_logic(
+            self,
+            request,
+            Follow,
+            follower=self.request.user,
+            following=self.get_object(),
+        )
 
 
 class SubscriptionViewSet(mixins.ListModelMixin, GenericViewSet):
@@ -202,9 +253,21 @@ class SubscriptionViewSet(mixins.ListModelMixin, GenericViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return User.objects.filter(
-            followers__id=self.request.user.id
-        ).prefetch_related('recipes')
+        user = self.request.user
+        queryset = User.objects.prefetch_related('recipes').filter(
+            followers__follower=user
+        )
+        if user.is_authenticated:
+            queryset = queryset.annotate(
+                is_subscribed=Exists(
+                    queryset.filter(following__id=OuterRef('pk'))
+                ),
+            )
+        else:
+            queryset = queryset.annotate(
+                is_subscribed=Value(False, output_field=BooleanField()),
+            )
+        return queryset
 
 
 class IngredientViewSet(

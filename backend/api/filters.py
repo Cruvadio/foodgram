@@ -28,7 +28,7 @@ class RecipesFilter(filters.FilterSet):
         if not self.request.user.is_authenticated:
             return queryset
         if value == 1:
-            return queryset.filter(favourited_by=user)
+            return queryset.filter(favorited_by__user=user)
         else:
             return queryset
 
@@ -38,5 +38,4 @@ class RecipesFilter(filters.FilterSet):
         user = self.request.user
         if value == 1:
             return queryset.filter(carts__owner=user)
-        else:
-            return queryset
+        return queryset

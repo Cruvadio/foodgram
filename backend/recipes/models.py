@@ -35,6 +35,7 @@ class Recipe(models.Model):
         unique_together = ('name', 'author')
         verbose_name = 'Рецепт'
         verbose_name_plural = 'Рецепты'
+        ordering = ('-published_date',)
 
     def __str__(self):
         return f'{self.name} {self.author.username} {self.cooking_time} '
@@ -93,15 +94,25 @@ class IngredientAmountPerRecipe(models.Model):
         )
 
 
-# class IngredientAmountPerCart(models.Model):
-#     cart = models.ForeignKey('Cart', on_delete=models.CASCADE, )
-#     ingredient = models.ForeignKey(Ingredient, on_delete=models.CASCADE, )
-#     amount = models.FloatField()
-#
-#     class Meta:
-#         unique_together = ('cart', 'ingredient')
-#         verbose_name = 'Количество ингредиента на рецепт'
-#         verbose_name_plural = 'Количества ингредиента на рецепт'
+class Favorite(models.Model):
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name='favorited_by',
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='favorites',
+    )
+
+    class Meta:
+        unique_together = ('recipe', 'user')
+        verbose_name = 'Любимый'
+        verbose_name_plural = 'Любимые'
+
+    def __str__(self):
+        return f'{self.user} - {self.recipe}'
 
 
 class Cart(models.Model):
