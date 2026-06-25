@@ -8,6 +8,7 @@ from rest_framework import serializers
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.core.exceptions import ValidationError
+from django.db.models import F, Sum
 
 from recipes.models import (
     Cart,
@@ -328,29 +329,38 @@ class UserFollowingsSerializer(serializers.ModelSerializer):
 class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
-        fields = ('recipes',)
-        read_only_fields = ('recipes',)
+        fields = ('recipe', 'user')
+        read_only_fields = ('recipe', 'user')
+
+    def get_relation(self):
+        request = self.context['request']
+        return {'user': request.user, 'recipe': self.context['instance']}
 
     def validate(self, attrs):
         request = self.context['request']
-        recipe = self.context.get('recipe')
-        cart, _ = Cart.objects.get_or_create(owner=request.user)
-        exists = cart.recipes.contains(recipe)
+        exists = Cart.objects.filter(**self.get_relation()).exists()
         if request.method == 'POST' and exists:
             raise serializers.ValidationError('Recipe already in cart.')
-        elif request.method == 'DELETE' and not exists:
+        if request.method == 'DELETE' and not exists:
             raise serializers.ValidationError('Recipe not in cart.')
-
-        self._cart = cart
         return attrs
 
-    def save(self):
-        recipe = self.context.get('recipe')
-        if self.context['request'].method == 'POST':
-            self._cart.recipes.add(recipe)
-        else:
-            self._cart.recipes.remove(recipe)
-        return self._cart
+
+class ShoppingCartIngredientsSerializer(serializers.Serializer):
+    ingredients = serializers.SerializerMethodField()
+
+    def get_ingredients(self, user):
+        return list(
+            IngredientAmountPerRecipe.objects.filter(
+                recipe__in_carts__user=user
+            )
+            .values(
+                name=F('ingredient__name'),
+                unit=F('ingredient__measurement_unit'),
+            )
+            .annotate(amount=Sum('amount'))
+            .order_by('name')
+        )
 
 
 class FavoriteSerializer(serializers.ModelSerializer):
@@ -359,25 +369,18 @@ class FavoriteSerializer(serializers.ModelSerializer):
         fields = ('recipe', 'user')
         read_only_fields = ('recipe', 'user')
 
+    def get_relation(self):
+        request = self.context['request']
+        return {'user': request.user, 'recipe': self.context['instance']}
+
     def validate(self, attrs):
         request = self.context['request']
-        recipe = self.context['instance']
-        exists = Favorite.objects.filter(
-            recipe=recipe, user=request.user
-        ).exists()
+        exists = Favorite.objects.filter(**self.get_relation()).exists()
         if request.method == 'POST' and exists:
             raise serializers.ValidationError('Recipe already in favorites.')
         if request.method == 'DELETE' and not exists:
             raise serializers.ValidationError('Recipe not in favorites.')
         return attrs
-
-    def save(self):
-        request = self.context['request']
-        recipe = self.context['instance']
-        if request.method == 'POST':
-            Favorite.objects.create(recipe=recipe, user=request.user)
-        else:
-            Favorite.objects.filter(recipe=recipe, user=request.user).delete()
 
 
 class FollowSerializer(serializers.ModelSerializer):
@@ -386,26 +389,21 @@ class FollowSerializer(serializers.ModelSerializer):
         fields = ('follower', 'following')
         read_only_fields = ('follower', 'following')
 
+    def get_relation(self):
+        request = self.context['request']
+        return {
+            'follower': request.user,
+            'following': self.context['instance'],
+        }
+
     def validate(self, attrs):
         request = self.context['request']
         following = self.context['instance']
         if following == request.user:
             raise serializers.ValidationError('Cannot follow yourself.')
-        exists = Follow.objects.filter(
-            follower=request.user, following=following
-        ).exists()
+        exists = Follow.objects.filter(**self.get_relation()).exists()
         if request.method == 'POST' and exists:
             raise serializers.ValidationError('Already following this user.')
         if request.method == 'DELETE' and not exists:
             raise serializers.ValidationError('Not following this user.')
         return attrs
-
-    def save(self):
-        request = self.context['request']
-        following = self.context['instance']
-        if request.method == 'POST':
-            Follow.objects.create(follower=request.user, following=following)
-        else:
-            Follow.objects.filter(
-                follower=request.user, following=following
-            ).delete()

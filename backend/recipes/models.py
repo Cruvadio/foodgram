@@ -67,7 +67,7 @@ class Tag(models.Model):
         verbose_name = 'Тэг'
 
     def __str__(self):
-        return {self.name}
+        return self.name
 
 
 class Ingredient(models.Model):
@@ -142,21 +142,23 @@ class Favorite(models.Model):
 
 
 class Cart(models.Model):
-    owner = models.OneToOneField(
+    user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='cart',
-        verbose_name='Владелец',
+        verbose_name='Пользователь',
     )
-    recipes = models.ManyToManyField(
-        'Recipe',
-        related_name='carts',
-        verbose_name='Рецепты',
+    recipe = models.ForeignKey(
+        Recipe,
+        on_delete=models.CASCADE,
+        related_name='in_carts',
+        verbose_name='Рецепт',
     )
 
     class Meta:
-        verbose_name_plural = 'Корзины'
+        unique_together = ('user', 'recipe')
         verbose_name = 'Корзина'
+        verbose_name_plural = 'Корзины'
 
     def __str__(self):
-        return f'{self.owner.username} {self.recipes.count()}'
+        return f'{self.user} - {self.recipe}'

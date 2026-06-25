@@ -48,12 +48,16 @@ class SubscribeMixin:
             data={}, context={'request': request, 'instance': instance}
         )
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        relation = serializer.get_relation()
         if request.method == 'POST':
+            serializer.save(**relation)
             return Response(
                 self.get_serializer(instance).data,
                 status=status.HTTP_201_CREATED,
             )
+        action_serializer_class.Meta.model.objects.filter(
+            **relation
+        ).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -101,7 +105,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
                     user.favorites.filter(recipe__id=OuterRef('pk'))
                 ),
                 is_in_shopping_cart=Exists(
-                    Cart.objects.filter(owner=user, recipes=OuterRef('pk'))
+                    Cart.objects.filter(user=user, recipe=OuterRef('pk'))
                 ),
             )
         else:
@@ -141,23 +145,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
         permission_classes=[IsAuthenticated],
     )
     def shopping_cart(self, request, pk=None):
-        recipe = self.get_object()
-        serializer = CartSerializer(
-            data={},
-            context={
-                'request': request,
-                'recipe': recipe,
-            },
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        if request.method == 'POST':
-            return Response(
-                ShortRecipeSerializer(recipe).data,
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return self._toggle(request, CartSerializer)
 
     @action(
         detail=False,
@@ -166,7 +154,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
         permission_classes=[IsAuthenticated],
     )
     def download_shopping_cart(self, request):
-        shopping_list = make_ingredients_in_cart_list(request)
+        shopping_list = make_ingredients_in_cart_list(request.user)
         response = HttpResponse(shopping_list, content_type='text/plain')
         response['Content-Disposition'] = (
             'attachment; filename="shopping_list.txt"'

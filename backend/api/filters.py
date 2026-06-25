@@ -36,5 +36,5 @@ class RecipesFilter(filters.FilterSet):
             return queryset
         user = self.request.user
         if value == 1:
-            return queryset.filter(carts__owner=user)
+            return queryset.filter(in_carts__user=user)
         return queryset

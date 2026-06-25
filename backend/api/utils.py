@@ -1,19 +1,9 @@
-from django.db.models import Sum
-
-from recipes.models import Cart
+from .serializers import ShoppingCartIngredientsSerializer
 
 
-def make_ingredients_in_cart_list(request):
-    cart, _ = Cart.objects.get_or_create(owner=request.user)
-    ingredients = (
-        cart.recipes.values_list(
-            'ingredient_amounts__ingredient__name',
-            'ingredient_amounts__ingredient__measurement_unit',
-        )
-        .annotate(amount=Sum('ingredient_amounts__amount'))
-        .order_by('ingredient_amounts__ingredient__name')
-    )
+def make_ingredients_in_cart_list(user):
+    ingredients = ShoppingCartIngredientsSerializer(user).data['ingredients']
     shopping_list = 'Список покупок:\n\n'
-    for name, amount, unit in ingredients:
-        shopping_list += f'- {name}: {amount} {unit}\n'
+    for item in ingredients:
+        shopping_list += f'- {item["name"]}: {item["amount"]} {item["unit"]}\n'
     return shopping_list
