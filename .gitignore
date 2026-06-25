@@ -140,5 +140,6 @@ dmypy.json
 
 static/
 media/
+backend/collect_static/
 
 add_ingredients.py
