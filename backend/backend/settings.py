@@ -68,7 +68,6 @@ DATABASES = {
     }
 }
 
-DEFAULT_PAGE_SIZE = 10
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -78,7 +77,6 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'api.paginators.PageNumberLimitPagination',
-    'PAGE_SIZE': DEFAULT_PAGE_SIZE,
     'SEARCH_PARAM': 'name',
 }
 

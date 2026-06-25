@@ -9,22 +9,31 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import (
-    GenericViewSet, ModelViewSet, ReadOnlyModelViewSet,
+    GenericViewSet,
+    ModelViewSet,
+    ReadOnlyModelViewSet,
 )
 
 from django.contrib.auth import get_user_model
 from django.db.models import BooleanField, Exists, OuterRef, Value
 from django.http import HttpResponse
 
-from recipes.models import Cart, Favorite, Ingredient, Recipe, Tag
-from users.models import Follow
+from recipes.models import Cart, Ingredient, Recipe, Tag
 
 from .filters import RecipesFilter
 from .permissions import CurrentUser, IsAuthorOrReadOnly
 from .serializers import (
-    AvatarRequestSerializer, AvatarResponseSerializer, CartSerializer,
-    IngredientSerializer, RecipeSerializer, ShortRecipeSerializer,
-    TagSerializer, UserCreateSerializer, UserFollowingsSerializer,
+    AvatarRequestSerializer,
+    AvatarResponseSerializer,
+    CartSerializer,
+    FavoriteSerializer,
+    FollowSerializer,
+    IngredientSerializer,
+    RecipeSerializer,
+    ShortRecipeSerializer,
+    TagSerializer,
+    UserCreateSerializer,
+    UserFollowingsSerializer,
     UserProfileSerializer,
 )
 from .utils import make_ingredients_in_cart_list
@@ -33,25 +42,19 @@ User = get_user_model()
 
 
 class SubscribeMixin:
-    @staticmethod
-    def subscribe_logic(self, request, model, **kwargs):
+    def _toggle(self, request, action_serializer_class):
         instance = self.get_object()
-
+        serializer = action_serializer_class(
+            data={}, context={'request': request, 'instance': instance}
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
         if request.method == 'POST':
-            if model.objects.filter(**kwargs).exists():
-                return Response(status=status.HTTP_400_BAD_REQUEST)
-            data = self.get_serializer(instance).data
-            model.objects.create(**kwargs)
-            return Response(data=data, status=status.HTTP_201_CREATED)
-
-        elif request.method == 'DELETE':
-            deleted = model.objects.filter(**kwargs).delete()
-            if deleted:
-                return Response(status=status.HTTP_204_NO_CONTENT)
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-
-        else:
-            return Response(status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            return Response(
+                self.get_serializer(instance).data,
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class TagViewSet(ReadOnlyModelViewSet):
@@ -89,8 +92,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
         user = self.request.user
         queryset = (
             Recipe.objects.select_related('author')
-            .prefetch_related('tags')
-            .prefetch_related('ingredients')
+            .prefetch_related('tags', 'ingredients')
             .order_by('-published_date')
         )
         if user.is_authenticated:
@@ -116,7 +118,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
         serializer.save(author=self.request.user)
 
     @action(detail=True, methods=['get'], url_path='get-link')
-    def get_link(self, request, pk=None):
+    def short_link(self, request, pk=None):
         relative_url = f'/recipes/{pk}/'
         absolute_url = request.build_absolute_uri(relative_url)
         tiny_type = Shortener()
@@ -131,13 +133,7 @@ class RecipeViewSet(ModelViewSet, SubscribeMixin, MultiSerializerViewSetMixin):
         permission_classes=[IsAuthenticated],
     )
     def favorite(self, request, pk=None):
-        return self.subscribe_logic(
-            self,
-            request,
-            Favorite,
-            recipe=self.get_object(),
-            user=request.user,
-        )
+        return self._toggle(request, FavoriteSerializer)
 
     @action(
         detail=True,
@@ -189,9 +185,9 @@ class UserViewSet(
     http_method_names = ['get', 'post', 'put', 'delete']
     permission_classes = [AllowAny]
     serializer_classes = {
-        'subscribe_toggle': UserFollowingsSerializer,
+        'subscribe': UserFollowingsSerializer,
         'create': UserCreateSerializer,
-        'manage_avatar': AvatarRequestSerializer,
+        'avatar': AvatarRequestSerializer,
     }
 
     lookup_value_regex = '[0-9]+'
@@ -217,7 +213,7 @@ class UserViewSet(
         url_path='me/avatar',
         permission_classes=[CurrentUser],
     )
-    def manage_avatar(self, request):
+    def avatar(self, request):
         if request.method == 'PUT':
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
@@ -236,16 +232,8 @@ class UserViewSet(
         permission_classes=[IsAuthenticated],
         serializer_class=UserFollowingsSerializer,
     )
-    def subscribe_toggle(self, request, pk=None):
-        if self.get_object() == request.user:
-            return Response(status=status.HTTP_400_BAD_REQUEST)
-        return self.subscribe_logic(
-            self,
-            request,
-            Follow,
-            follower=self.request.user,
-            following=self.get_object(),
-        )
+    def subscribe(self, request, pk=None):
+        return self._toggle(request, FollowSerializer)
 
 
 class SubscriptionViewSet(mixins.ListModelMixin, GenericViewSet):

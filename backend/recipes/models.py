@@ -1,34 +1,44 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
 class Recipe(models.Model):
-    name = models.CharField(max_length=100, help_text='Заголовок')
+    name = models.CharField(
+        max_length=100,
+        verbose_name='Название',
+    )
     author = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='recipes',
-        help_text='Автор рецепта',
+        verbose_name='Автор',
     )
     image = models.ImageField(
-        upload_to='recipes/pictures/', help_text='Картинка рецепта'
+        upload_to='recipes/pictures/',
+        verbose_name='Картинка',
     )
-    text = models.TextField(help_text='Описание рецепта')
-    cooking_time = models.IntegerField(
-        help_text='Время приготовления (минуты)'
+    text = models.TextField(
+        verbose_name='Описание',
+    )
+    cooking_time = models.PositiveSmallIntegerField(
+        verbose_name='Время приготовления', validators=[MinValueValidator(1)]
     )
     tags = models.ManyToManyField(
-        'Tag', related_name='recipes', blank=True, help_text='Теги рецепта'
+        'Tag',
+        related_name='recipes',
+        blank=True,
+        verbose_name='Теги',
     )
     ingredients = models.ManyToManyField(
         'Ingredient',
         through='IngredientAmountPerRecipe',
         related_name='recipes',
-        help_text='Ингредиенты рецепта',
+        verbose_name='Ингредиенты',
     )
-
     published_date = models.DateTimeField(
-        help_text='Дата публикации рецепта', auto_now_add=True
+        auto_now_add=True,
+        verbose_name='Дата публикации',
     )
 
     class Meta:
@@ -42,21 +52,33 @@ class Recipe(models.Model):
 
 
 class Tag(models.Model):
-    name = models.CharField(max_length=100, unique=True, help_text='Название')
-    slug = models.SlugField(unique=True, help_text='Слаг')
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name='Название',
+    )
+    slug = models.SlugField(
+        unique=True,
+        verbose_name='Слаг',
+    )
 
     class Meta:
         verbose_name_plural = 'Тэги'
         verbose_name = 'Тэг'
 
     def __str__(self):
-        return f'{self.name}'
+        return {self.name}
 
 
 class Ingredient(models.Model):
-    name = models.CharField(max_length=100, unique=True, help_text='Название')
+    name = models.CharField(
+        max_length=100,
+        unique=True,
+        verbose_name='Название',
+    )
     measurement_unit = models.CharField(
-        max_length=100, help_text='Единица измерения'
+        max_length=100,
+        verbose_name='Единица измерения',
     )
 
     class Meta:
@@ -72,15 +94,17 @@ class IngredientAmountPerRecipe(models.Model):
         Recipe,
         on_delete=models.CASCADE,
         related_name='ingredient_amounts',
-        help_text='Рецепт',
+        verbose_name='Рецепт',
     )
     ingredient = models.ForeignKey(
         Ingredient,
         on_delete=models.CASCADE,
         related_name='ingredient_amount',
-        help_text='Ингредиент',
+        verbose_name='Ингредиент',
     )
-    amount = models.FloatField(help_text='Количество ингредиента')
+    amount = models.PositiveSmallIntegerField(
+        verbose_name='Количество', validators=[MinValueValidator(1)]
+    )
 
     class Meta:
         unique_together = ('recipe', 'ingredient')
@@ -99,11 +123,13 @@ class Favorite(models.Model):
         Recipe,
         on_delete=models.CASCADE,
         related_name='favorited_by',
+        verbose_name='Рецепт',
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='favorites',
+        verbose_name='Пользователь',
     )
 
     class Meta:
@@ -120,10 +146,12 @@ class Cart(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='cart',
-        help_text='Хозяин корзины',
+        verbose_name='Владелец',
     )
     recipes = models.ManyToManyField(
-        'Recipe', related_name='carts', help_text='Рецепты в корзине'
+        'Recipe',
+        related_name='carts',
+        verbose_name='Рецепты',
     )
 
     class Meta:

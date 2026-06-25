@@ -1,12 +1,10 @@
 from django.db.models import Sum
 
-from api.serializers import CartSerializer
+from recipes.models import Cart
 
 
 def make_ingredients_in_cart_list(request):
-    serializer = CartSerializer(data={}, context={'request': request})
-    serializer.is_valid(raise_exception=True)
-    cart = serializer.save()
+    cart, _ = Cart.objects.get_or_create(owner=request.user)
     ingredients = (
         cart.recipes.values_list(
             'ingredient_amounts__ingredient__name',
